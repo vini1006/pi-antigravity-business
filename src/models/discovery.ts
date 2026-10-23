@@ -9,7 +9,7 @@ import type {
 import type { ProviderModelConfig } from "@earendil-works/pi-coding-agent";
 import { getApiKey } from "../auth/index.js";
 import { DEFAULT_ENDPOINT, fetchAvailableModelsCatalog, parseApiKey } from "../client/index.js";
-import { ANTIGRAVITY_API } from "../types/types.js";
+import { ANTIGRAVITY_API, type ModelInfoRaw } from "../types/types.js";
 import { antigravityEnv, isRecord } from "../utils/util.js";
 import { buildAntigravityCatalog, resolvedCatalog, type AntigravityCatalog } from "./grouping.js";
 import {
@@ -72,8 +72,45 @@ export async function discoverAntigravityModels(
   if (!models || Object.keys(models).length === 0) {
     throw new Error("Antigravity returned an empty or unrecognized model catalog");
   }
+  let sorts = available.data.agentModelSorts;
+  if (antigravityEnv("BUSINESS_PROJECT")?.trim()) sorts = enableBusinessModels(models, sorts);
   registerDiscoveredModelEnums(models);
-  return buildAntigravityCatalog(models, fallbackCatalog(), available.data.agentModelSorts);
+  return buildAntigravityCatalog(models, fallbackCatalog(), sorts);
+}
+
+/**
+ * The consumer catalog lists plan-gated models as `<id>-disabled` (e.g. Argon without Ultra/Pro).
+ * Business AI Code is gated by the admin instead and serves `<id>-{low,medium,high}`, so expose those.
+ * Mutates `models`; returns sorts with the disabled ids replaced.
+ */
+function enableBusinessModels<T>(models: Record<string, ModelInfoRaw>, sorts: T): T {
+  const levels = ["low", "medium", "high"];
+  const swaps = new Map<string, string[]>();
+  for (const [id, info] of Object.entries(models)) {
+    if (!id.endsWith("-disabled")) continue;
+    const base = id.slice(0, -"-disabled".length);
+    const {
+      disabled: _d,
+      tagTitle: _t,
+      tagDescription: _td,
+      ...rest
+    } = info as Record<string, unknown>;
+    delete models[id];
+    swaps.set(
+      id,
+      levels.map((level) => {
+        const name = `${String(rest.displayName)} (${level[0].toUpperCase()}${level.slice(1)})`;
+        models[`${base}-${level}`] = { ...rest, displayName: name };
+        return `${base}-${level}`;
+      }),
+    );
+  }
+  if (swaps.size === 0 || !Array.isArray(sorts)) return sorts;
+  return JSON.parse(JSON.stringify(sorts), (_k, v: unknown) =>
+    Array.isArray(v)
+      ? v.flatMap((x: unknown) => (typeof x === "string" ? (swaps.get(x) ?? [x]) : [x]))
+      : v,
+  ) as T;
 }
 
 export async function refreshAntigravityModels(
