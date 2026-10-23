@@ -1511,6 +1511,9 @@ export async function streamResponse(
   return hasContent;
 }
 
+const BUSINESS_USER_AGENT =
+  "antigravity/cli/1.4.5 (aidev_client; os_type=darwin; arch=arm64; cl=1004422050; auth_method=gcp)";
+
 export function streamAntigravity(
   model: Model<Api>,
   context: Context,
@@ -1575,15 +1578,40 @@ export function streamAntigravity(
           runtimeModel = runtimeCandidates[candIdx]!;
           setLastResolvedRuntimeModel(runtimeModel);
           recordStaticRouteDiagnostics(runtimeModel);
-          const body = JSON.stringify(buildRequest(model, context, projectId, opts, runtimeModel));
+          const built = buildRequest(model, context, projectId, opts, runtimeModel);
+          // Workspace (Business AI Code) accounts: ANTIGRAVITY_BUSINESS_PROJECT=<gcp project>.
+          // Mirrors the official agy CLI wire format (businessaicode.googleapis.com, auth_method=gcp).
+          const businessProject = antigravityEnv("BUSINESS_PROJECT")?.trim();
+          const body = JSON.stringify(
+            businessProject
+              ? {
+                  ...built.request,
+                  sessionId: undefined,
+                  labels: undefined,
+                  aicode: { experience: runtimeModel },
+                  entitlement: { userTier: antigravityEnv("BUSINESS_TIER") || "gcp-ge-standard-tier" },
+                }
+              : built,
+          );
+          const endpoints = businessProject
+            ? [
+                `${antigravityEnv("BUSINESS_URL") || "https://businessaicode.googleapis.com"}/v1beta/projects/${businessProject}/locations/global:streamGenerateContent?alt=sse`,
+              ]
+            : endpointCandidates().map((e) => `${e}/v1internal:streamGenerateContent?alt=sse`);
+          const reqHeaders = businessProject
+            ? {
+                ...requestHeaders,
+                "User-Agent": antigravityEnv("USER_AGENT") || BUSINESS_USER_AGENT,
+              }
+            : requestHeaders;
 
-          for (const endpoint of endpointCandidates()) {
+          for (const endpoint of endpoints) {
             setLastEndpoint(endpoint);
             response = await fetchWithHeaderDeadline(
-              `${endpoint}/v1internal:streamGenerateContent?alt=sse`,
+              endpoint,
               {
                 method: "POST",
-                headers: requestHeaders,
+                headers: reqHeaders,
                 body,
               },
               opts.signal,

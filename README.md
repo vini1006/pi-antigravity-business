@@ -186,6 +186,9 @@ All primary environment variables start with `ANTIGRAVITY_`. The legacy `NOAGY_`
 | --- | --- |
 | `ANTIGRAVITY_BASE_URL` | Override the API base URL. It must be HTTPS, contain no URL credentials, and target an allowed Google APIs host. |
 | `ANTIGRAVITY_PROJECT_ID` | Use a specific Cloud Code Assist project ID instead of discovery or the stable account fallback. |
+| `ANTIGRAVITY_BUSINESS_PROJECT` | Workspace (Business AI Code) accounts: send requests to `businessaicode.googleapis.com` for this GCP project, like the official `agy` CLI. Per-account license errors (`SUBSCRIPTION_REQUIRED`) on the consumer endpoint do not apply here. Models disabled by your admin return `MODEL_NOT_ALLOWED_BY_ADMIN`. |
+| `ANTIGRAVITY_BUSINESS_TIER` | Business entitlement tier. Defaults to `gcp-ge-standard-tier`. |
+| `ANTIGRAVITY_BUSINESS_URL` | Override the Business AI Code base URL. |
 | `ANTIGRAVITY_CALLBACK_HOST` | Bind OAuth callback to `127.0.0.1`, `::1`, or `localhost` only. Defaults to `127.0.0.1`. |
 | `ANTIGRAVITY_USER_AGENT` | Override the request user-agent. |
 | `ANTIGRAVITY_RUNTIME_MODEL` | Pin requests to a runtime model ID, bypassing discovered/fallback routing. |
